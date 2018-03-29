@@ -19,23 +19,22 @@
     using System.Linq;
     using System.Web.Http;
 
-
     [SitecoreAuthorize(new string[]
     {
         "sitecore\\ECM Advanced Users",
         "sitecore\\ECM Users"
-    }), ServicesController("EXM.AddLanguage")]
-    public class AddLanguageController : ServicesApiController
+    }), ServicesController("EXM.SupportAddLanguage")]
+    public class SupportAddLanguageController : ServicesApiController
     {
         private readonly Factory factory;
 
         private readonly Sitecore.ExM.Framework.Diagnostics.ILogger logger;
 
-        public AddLanguageController() : this(Factory.Instance, Sitecore.ExM.Framework.Diagnostics.Logger.Instance)
+        public SupportAddLanguageController() : this(Factory.Instance, Sitecore.ExM.Framework.Diagnostics.Logger.Instance)
         {
         }
 
-        public AddLanguageController(Factory factory, Sitecore.ExM.Framework.Diagnostics.ILogger logger)
+        public SupportAddLanguageController(Factory factory, Sitecore.ExM.Framework.Diagnostics.ILogger logger)
         {
             Assert.ArgumentNotNull(factory, "factory");
             Assert.ArgumentNotNull(logger, "logger");
@@ -77,7 +76,24 @@
                     addLanguageResponse.ErrorMessage = string.Format(EcmTexts.Localize("The {0} language has been created.", new object[0]), addLanguageResult.MessageLanguage.DisplayName);
                     addLanguageResponse.VariantMessages = (from variant in addLanguageResult.Variants
                                                            select string.Format(EcmTexts.Localize("The {0} version has been added to variant {1}.", new object[0]), addLanguageResult.MessageLanguage.DisplayName, variant.Name)).ToArray<string>();
-                    MessageItem messageItem = this.factory.GetMessageItem(data.MessageId, data.Language);              
+                    MessageItem messageItem = this.factory.GetMessageItem(data.MessageId, data.Language);
+
+                    #region sitecore.support.211435
+                    List<Database> listOfDatabases = Sitecore.Configuration.Factory.GetDatabases();
+                    Item rootManagerItem = null;
+                    Database database = null;
+                    this.GetManagerRootOfMessage(listOfDatabases, data, out rootManagerItem, out database);
+                    ManagerRoot myManagerRoot = Sitecore.Modules.EmailCampaign.Factory.GetManagerRootFromChildItem(rootManagerItem);
+                    Item myManagerRootItem = myManagerRoot.InnerItem;
+                    Sitecore.Globalization.Language newEmailLanguage = this.SetCurrentLanguage(data.NewLanguage, messageItem);
+                    Item rootItemInNewLanguage = database.GetItem(myManagerRootItem.ID, newEmailLanguage);
+                    Item emailItemInNewLanguage = database.GetItem(data.MessageId, newEmailLanguage);
+                    emailItemInNewLanguage.Editing.BeginEdit();
+                    emailItemInNewLanguage.Fields["Reply To"].Value = rootItemInNewLanguage.Fields["Reply To"].Value;
+                    emailItemInNewLanguage.Fields["From Address"].Value = rootItemInNewLanguage.Fields["From Address"].Value;
+                    emailItemInNewLanguage.Fields["From Name"].Value = rootItemInNewLanguage.Fields["From Name"].Value;
+                    emailItemInNewLanguage.Editing.EndEdit();
+                    #endregion sitecore.support.211435
 
                     if (messageItem != null && messageItem.Attachments.Any<MediaItem>())
                     {
@@ -100,6 +116,32 @@
                 addLanguageResponse.ErrorMessage = EcmTexts.Localize("A serious error occurred please contact the administrator", new object[0]);
             }
             return addLanguageResponse;
-        } 
+        }
+
+        //sitecore.support.211435
+        private Sitecore.Globalization.Language SetCurrentLanguage(string language, MessageItem messageItem)
+        {
+            Sitecore.Globalization.Language language2 = LanguageManager.GetLanguage(language);
+            messageItem.TargetLanguage = language2;
+            messageItem.Source.TargetLanguage = language2;
+            return language2;
+        }
+
+        //sitecore.support.211435
+        private void GetManagerRootOfMessage(List<Database> listOfDatabases, AddLanguageContext data, out Item rootManagerItem, out Database database)
+        {
+            rootManagerItem = null;
+            database = null;
+            for (int i = 0; i < listOfDatabases.Count; i++)
+            {
+                rootManagerItem = listOfDatabases[i].GetItem(data.MessageId);
+                if (rootManagerItem != null)
+                {
+                    database = listOfDatabases[i];
+                    break;
+                }
+            }
+        }
+
     }
 }
