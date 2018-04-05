@@ -2,8 +2,9 @@
   return {
     priority: 1,
     execute: function (context) {
-      var requestName = "EXM/AddLanguage";
-      
+     //sitecore.support.211435
+	 var requestName = "EXM/SupportAddLanguage";
+     //var requestName = "EXM/AddLanguage";
       ServerRequest(requestName, {
         data: { messageId: context.currentContext.messageId, language: context.currentContext.language, newLanguage: context.currentContext.newLanguage },
         success: function (response) {
